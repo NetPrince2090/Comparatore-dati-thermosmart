@@ -72,10 +72,22 @@
 
         function parseDateLine(line) {
             const cleaned = line.replace(/^data\s*[:\-]?\s*/i, '').trim();
-            let m = cleaned.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/);
-            if (m) return { y: Number(m[3]), mo: Number(m[2]), d: Number(m[1]) };
-            m = cleaned.match(/^(\d{4})[\/\-](\d{1,2})[\/\-](\d{1,2})$/);
-            if (m) return { y: Number(m[1]), mo: Number(m[2]), d: Number(m[3]) };
+            let m = cleaned.match(/(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})/);
+            if (m) {
+                const d = Number(m[1]);
+                const mo = Number(m[2]);
+                const yRaw = m[3];
+                const y = yRaw.length === 2 ? 2000 + Number(yRaw) : Number(yRaw);
+                if (d >= 1 && d <= 31 && mo >= 1 && mo <= 12) return { y, mo, d };
+            }
+
+            m = cleaned.match(/(\d{4})[\/\-](\d{1,2})[\/\-](\d{1,2})/);
+            if (m) {
+                const y = Number(m[1]);
+                const mo = Number(m[2]);
+                const d = Number(m[3]);
+                if (d >= 1 && d <= 31 && mo >= 1 && mo <= 12) return { y, mo, d };
+            }
             return null;
         }
 
