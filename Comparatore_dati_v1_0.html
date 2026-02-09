@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Web App Termostati - 08 Febbraio 2026</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+    <style>
+        body { font-family: 'Inter', sans-serif; }
+        .chart-container { max-width: 1100px; margin: 1.5rem auto; padding: 1rem; }
+        textarea { font-family: monospace; font-size: 0.75rem; }
+    </style>
+</head>
+<body class="bg-slate-50 text-slate-900">
+
+    <div class="chart-container">
+        <header class="mb-6 text-center">
+            <h1 class="text-2xl font-bold text-slate-800">Monitoraggio Termostati Sala e Cucina</h1>
+            <p class="text-slate-500 text-sm">Incolla i dati per aggiornare il grafico in tempo reale</p>
+        </header>
+
+        <!-- Area Inserimento Dati -->
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+            <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-200">
+                <label class="block text-sm font-bold text-blue-700 mb-2 uppercase">Dati Sala</label>
+                <textarea id="inputSala" class="w-full h-32 p-2 border border-slate-300 rounded focus:ring-2 focus:ring-blue-500 focus:outline-none" placeholder="Orario | Temperatura | Evento..."></textarea>
+            </div>
+            <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-200">
+                <label class="block text-sm font-bold text-orange-600 mb-2 uppercase">Dati Cucina</label>
+                <textarea id="inputCucina" class="w-full h-32 p-2 border border-slate-300 rounded focus:ring-2 focus:ring-orange-500 focus:outline-none" placeholder="Orario | Temperatura | Evento..."></textarea>
+            </div>
+        </div>
+
+        <div class="flex justify-center mb-6">
+            <button onclick="updateApp()" class="bg-slate-800 text-white px-8 py-2 rounded-lg font-bold hover:bg-slate-700 transition shadow-lg uppercase tracking-wider">Aggiorna Grafico</button>
+        </div>
+        
+        <div class="bg-white p-4 rounded-xl shadow-lg border border-slate-200 h-[500px]">
+            <canvas id="dailyChart"></canvas>
+        </div>
+
+        <div class="mt-6 grid grid-cols-1 md:grid-cols-2 gap-4">
+            <!-- Riquadro Statistiche (Sinistra) -->
+            <div class="p-4 bg-white rounded-lg border border-slate-200 shadow-sm grid grid-cols-2 gap-4">
+                <div class="border-r border-slate-100 pr-2">
+                    <h2 class="font-bold text-blue-700 text-sm flex items-center mb-1">
+                        <span class="w-2 h-2 bg-blue-700 rounded-full mr-2"></span> SALA
+                    </h2>
+                    <p id="salaCycles" class="text-xs font-semibold text-slate-600">-</p>
+                    <p id="salaMinutes" class="text-xs font-bold text-orange-600">-</p>
+                </div>
+                <div class="pl-2">
+                    <h2 class="font-bold text-orange-600 text-sm flex items-center mb-1">
+                        <span class="w-2 h-2 bg-orange-600 rounded-full mr-2"></span> CUCINA
+                    </h2>
+                    <p id="cucinaCycles" class="text-xs font-semibold text-slate-600">-</p>
+                    <p id="cucinaMinutes" class="text-xs font-bold text-orange-600">-</p>
+                </div>
+            </div>
+            
+            <!-- Legenda Eventi (Destra) -->
+            <div class="p-4 bg-white rounded-lg border border-slate-200 shadow-sm flex flex-col justify-center">
+                <h2 class="font-bold text-slate-700 mb-2 text-sm text-center">Legenda Eventi</h2>
+                <div class="flex justify-around text-xs font-medium">
+                    <span class="flex items-center text-green-600">
+                        <span class="w-3 h-3 bg-green-500 rounded-full mr-1.5 border border-white shadow-sm"></span> 
+                        ACCENSIONE (A)
+                    </span>
+                    <span class="flex items-center text-red-600">
+                        <span class="w-3 h-3 bg-red-500 rounded-full mr-1.5 border border-white shadow-sm"></span> 
+                        SPEGNIMENTO (B)
+                    </span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let chartInstance = null;
+
+        // Esempi iniziali basati sui tuoi ultimi dati
+        const defaultSala = `0000 | 19.5 | S\n0030 | 19.4 | S\n0100 | 19.3 | S\n0130 | 19.3 | S\n0140 | 19.2 | A\n0200 | 19.5 | S\n0221 | 19.8 | B\n0230 | 19.7 | S\n0300 | 19.6 | S\n0330 | 19.7 | S\n0400 | 19.8 | S\n0430 | 19.8 | S\n0500 | 19.8 | S\n0530 | 19.8 | S\n0600 | 19.7 | S\n0630 | 19.6 | S\n0700 | 19.6 | S\n0730 | 19.5 | S\n0800 | 19.5 | S\n0830 | 19.4 | S\n0900 | 19.4 | A\n0930 | 19.7 | S\n1000 | 20.0 | S\n1028 | 20.4 | B\n1030 | 20.4 | S\n1100 | 20.6 | S\n1130 | 20.9 | S\n1200 | 21.1 | S\n1230 | 21.1 | S\n1300 | 21.1 | S\n1330 | 21.1 | S\n1400 | 21.1 | S\n1430 | 21.0 | S\n1500 | 20.9 | S\n1526 | 20.9 | A\n1530 | 20.9 | S\n1543 | 21.1 | B\n1600 | 21.0 | S\n1630 | 20.9 | S\n1643 | 20.9 | A\n1658 | 21.3 | B\n1700 | 21.2 | S\n1730 | 21.2 | S\n1800 | 21.4 | S\n1830 | 21.8 | S\n1900 | 22.2 | S\n1930 | 22.5 | S\n2000 | 22.7 | S\n2030 | 22.7 | S\n2100 | 22.8 | S\n2130 | 22.7 | S\n2200 | 22.6 | S\n2230 | 22.6 | S\n2300 | 22.5 | S\n2330 | 22.4 | S`;
+        
+        const defaultCucina = `0000 | 20.2 | S\n0030 | 20.0 | S\n0100 | 20.0 | S\n0130 | 19.9 | S\n0200 | 19.9 | S\n0230 | 19.9 | S\n0300 | 20.1 | S\n0330 | 20.2 | S\n0400 | 20.2 | S\n0430 | 20.2 | S\n0500 | 20.1 | S\n0530 | 20.1 | S\n0600 | 20.0 | S\n0630 | 19.9 | S\n0700 | 20.0 | S\n0730 | 19.9 | S\n0800 | 19.9 | S\n0830 | 19.8 | S\n0900 | 19.8 | A\n0930 | 20.0 | S\n1000 | 20.4 | S\n1003 | 20.5 | B\n1030 | 20.6 | S\n1100 | 20.7 | S\n1130 | 20.9 | S\n1200 | 21.1 | S\n1230 | 21.3 | S\n1300 | 21.3 | S\n1330 | 21.3 | S\n1400 | 21.3 | S\n1430 | 21.2 | S\n1500 | 21.2 | S\n1530 | 21.1 | S\n1600 | 21.1 | S\n1630 | 21.1 | S\n1640 | 20.9 | A\n1656 | 21.3 | B\n1700 | 21.3 | S\n1730 | 21.4 | S\n1800 | 21.5 | S\n1830 | 21.8 | S\n1900 | 22.0 | S\n1930 | 22.3 | S\n2000 | 22.4 | S\n2030 | 22.6 | S\n2100 | 22.6 | S\n2130 | 22.6 | S\n2200 | 22.6 | S\n2230 | 22.5 | S\n2300 | 22.5 | S\n2330 | 22.3 | S`;
+
+        // Parser dei dati incollati
+        function parseData(text) {
+            if (!text || text.trim() === "") return [];
+            return text.split('\n').filter(line => line.includes('|')).map(line => {
+                const parts = line.split('|').map(p => p.trim());
+                let rawTime = parts[0];
+                // Formatta 0900 in 09:00
+                if (rawTime.length === 4) rawTime = rawTime.slice(0,2) + ":" + rawTime.slice(2);
+                return {
+                    t: rawTime,
+                    v: parseFloat(parts[1]),
+                    e: parts[2]
+                };
+            }).filter(d => !isNaN(d.v));
+        }
+
+        function timeToMinutes(t) {
+            const [h, m] = t.split(':').map(Number);
+            return h * 60 + m;
+        }
+
+        function calculateStats(data) {
+            let cycles = 0;
+            let totalMins = 0;
+            let startTime = null;
+            data.forEach(item => {
+                if (item.e === 'A') {
+                    cycles++;
+                    startTime = timeToMinutes(item.t);
+                } else if (item.e === 'B' && startTime !== null) {
+                    totalMins += (timeToMinutes(item.t) - startTime);
+                    startTime = null;
+                }
+            });
+            return { cycles, totalMins };
+        }
+
+        function updateApp() {
+            const salaRaw = parseData(document.getElementById('inputSala').value);
+            const cucinaRaw = parseData(document.getElementById('inputCucina').value);
+
+            // Calcolo labels unificate
+            const labels = Array.from(new Set([...salaRaw.map(d=>d.t), ...cucinaRaw.map(d=>d.t)])).sort();
+            
+            const mapData = (raw) => labels.map(l => {
+                const f = raw.find(d => d.t === l);
+                return f ? f.v : null;
+            });
+            
+            const mapEvents = (raw) => labels.map(l => {
+                const f = raw.find(d => d.t === l);
+                return f ? f.e : 'S';
+            });
+
+            const salaVals = mapData(salaRaw);
+            const cucinaVals = mapData(cucinaRaw);
+            const salaEvs = mapEvents(salaRaw);
+            const cucinaEvs = mapEvents(cucinaRaw);
+
+            // Statistiche
+            const sStat = calculateStats(salaRaw);
+            const cStat = calculateStats(cucinaRaw);
+            
+            document.getElementById('salaCycles').innerText = `${sStat.cycles} Cicli ON`;
+            document.getElementById('salaMinutes').innerText = `${sStat.totalMins} min totali`;
+            document.getElementById('cucinaCycles').innerText = `${cStat.cycles} Cicli ON`;
+            document.getElementById('cucinaMinutes').innerText = `${cStat.totalMins} min totali`;
+
+            // Grafico
+            const ctx = document.getElementById('dailyChart').getContext('2d');
+            if (chartInstance) chartInstance.destroy();
+
+            chartInstance = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: labels,
+                    datasets: [
+                        {
+                            label: 'Sala (°C)',
+                            data: salaVals,
+                            borderColor: '#1d4ed8',
+                            backgroundColor: '#1d4ed8',
+                            borderWidth: 2,
+                            tension: 0.3,
+                            spanGaps: true,
+                            pointRadius: (c) => (['A','B'].includes(salaEvs[c.dataIndex]) ? 7 : 0),
+                            pointBackgroundColor: (c) => {
+                                const e = salaEvs[c.dataIndex];
+                                return e === 'A' ? '#22c55e' : (e === 'B' ? '#ef4444' : 'transparent');
+                            },
+                            pointBorderColor: '#fff',
+                            pointBorderWidth: 1.5
+                        },
+                        {
+                            label: 'Cucina (°C)',
+                            data: cucinaVals,
+                            borderColor: '#ea580c',
+                            backgroundColor: '#ea580c',
+                            borderWidth: 2,
+                            tension: 0.3,
+                            spanGaps: true,
+                            pointRadius: (c) => (['A','B'].includes(cucinaEvs[c.dataIndex]) ? 7 : 0),
+                            pointBackgroundColor: (c) => {
+                                const e = cucinaEvs[c.dataIndex];
+                                return e === 'A' ? '#22c55e' : (e === 'B' ? '#ef4444' : 'transparent');
+                            },
+                            pointBorderColor: '#fff',
+                            pointBorderWidth: 1.5
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    interaction: { mode: 'index', intersect: false },
+                    scales: {
+                        y: { min: 18, max: 24, ticks: { stepSize: 0.5 }, title: { display: true, text: 'Temperatura °C' } },
+                        x: { ticks: { autoSkip: true, maxTicksLimit: 24 } }
+                    },
+                    plugins: {
+                        legend: { position: 'top' },
+                        tooltip: {
+                            backgroundColor: 'rgba(255, 255, 255, 0.95)',
+                            titleColor: '#1e293b',
+                            bodyColor: '#1e293b',
+                            borderColor: '#e2e8f0',
+                            borderWidth: 1,
+                            callbacks: {
+                                label: (item) => {
+                                    const evSet = item.datasetIndex === 0 ? salaEvs : cucinaEvs;
+                                    const ev = evSet[item.dataIndex];
+                                    let status = `${item.dataset.label}: ${item.raw}°C`;
+                                    if (ev === 'A') status += ' [ON]';
+                                    if (ev === 'B') status += ' [OFF]';
+                                    return status;
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        window.onload = () => {
+            // Precarica i dati esistenti
+            document.getElementById('inputSala').value = defaultSala;
+            document.getElementById('inputCucina').value = defaultCucina;
+            updateApp();
+        };
+    </script>
+</body>
+</html>
