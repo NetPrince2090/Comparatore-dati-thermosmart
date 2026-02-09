@@ -100,6 +100,14 @@
             return `${dd}/${mo} ${hh}:${mm}`;
         }
 
+        function formatDateFromParts(parts) {
+            if (!parts) return '-';
+            const dd = String(parts.d).padStart(2, '0');
+            const mo = String(parts.mo).padStart(2, '0');
+            const yy = String(parts.y);
+            return `${dd}/${mo}/${yy}`;
+        }
+
         function parseData(text, fallbackName) {
             if (!text || text.trim() === '') return { name: fallbackName, rows: [] };
             const lines = text.split('\n').map(line => line.trim()).filter(Boolean);
@@ -124,7 +132,7 @@
                     return { t: time.label, k: key, v: parseFloat(parts[1]), e: parts[2] };
                 })
                 .filter(d => d && !isNaN(d.v));
-            return { name, rows, hasDate: !!parsedDate };
+            return { name, rows, hasDate: !!parsedDate, dateText: formatDateFromParts(parsedDate) };
         }
 
         function calculateStats(data) {
@@ -219,6 +227,7 @@
                     <h2 class="font-bold text-sm flex items-center mb-1" style="color: ${palette[i]}">
                         <span class="w-2 h-2 rounded-full mr-2" style="background-color: ${palette[i]}"></span> ${set.name.toUpperCase()}
                     </h2>
+                    <p class="text-xs text-slate-500">Data: ${set.dateText}</p>
                     <p class="text-xs font-semibold text-slate-600">${stat.cycles} Cicli ON</p>
                     <p class="text-xs font-bold text-orange-600">${stat.totalMins} min totali</p>
                 `;
