@@ -20,6 +20,10 @@
             <p class="text-slate-500 text-sm">Incolla i dati per aggiornare il grafico in tempo reale</p>
         </header>
 
+        <div class="flex justify-center mb-4">
+            <button onclick="clearInputs()" class="bg-red-600 text-white px-6 py-2 rounded-lg font-bold hover:bg-red-500 transition shadow-md uppercase tracking-wider">Cancella Tutto</button>
+        </div>
+
         <!-- Area Inserimento Dati -->
         <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
             <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-200">
@@ -119,6 +123,12 @@
                 }
             });
             return { cycles, totalMins };
+        }
+
+        function clearInputs() {
+            document.getElementById('inputSala').value = '';
+            document.getElementById('inputCucina').value = '';
+            updateApp();
         }
 
         function updateApp() {
