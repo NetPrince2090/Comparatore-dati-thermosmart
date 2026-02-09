@@ -21,13 +21,24 @@
         </header>
 
         <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-200 mb-4">
-            <label for="fieldCount" class="block text-sm font-bold text-slate-700 mb-2 uppercase">Numero Campi Dati</label>
-            <select id="fieldCount" class="w-full md:w-64 p-2 border border-slate-300 rounded focus:ring-2 focus:ring-slate-500 focus:outline-none">
-                <option value="1">1 Campo</option>
-                <option value="2" selected>2 Campi</option>
-                <option value="3">3 Campi</option>
-                <option value="4">4 Campi</option>
-            </select>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                    <label for="fieldCount" class="block text-sm font-bold text-slate-700 mb-2 uppercase">Numero Campi Dati</label>
+                    <select id="fieldCount" class="w-full p-2 border border-slate-300 rounded focus:ring-2 focus:ring-slate-500 focus:outline-none">
+                        <option value="1">1 Campo</option>
+                        <option value="2" selected>2 Campi</option>
+                        <option value="3">3 Campi</option>
+                        <option value="4">4 Campi</option>
+                    </select>
+                </div>
+                <div>
+                    <label for="dateMode" class="block text-sm font-bold text-slate-700 mb-2 uppercase">Gestione Data Grafico</label>
+                    <select id="dateMode" class="w-full p-2 border border-slate-300 rounded focus:ring-2 focus:ring-slate-500 focus:outline-none">
+                        <option value="consider" selected>Considera la data degli intervalli</option>
+                        <option value="ignore">Ignora la data (sovrappone per orario)</option>
+                    </select>
+                </div>
+            </div>
         </div>
 
         <!-- Area Inserimento Dati -->
@@ -110,6 +121,11 @@
             const dd = String(d.getDate()).padStart(2, '0');
             const mo = String(d.getMonth() + 1).padStart(2, '0');
             return `${dd}/${mo} ${hh}:${mm}`;
+        }
+
+        function timeLabelToLocalKey(label) {
+            const [h, m] = label.split(':').map(Number);
+            return new Date(1970, 0, 1, h, m, 0, 0).getTime();
         }
 
         function formatDateFromParts(parts) {
@@ -210,6 +226,7 @@
 
         function updateApp() {
             const count = Number(document.getElementById('fieldCount').value);
+            const useDateOnChart = document.getElementById('dateMode').value === 'consider';
             const parsedSets = [];
             for (let i = 0; i < count; i++) {
                 const parsed = parseData(document.getElementById(`input-${i}`).value, `Campo ${i + 1}`);
@@ -217,15 +234,16 @@
                 document.getElementById(`panelTitle-${i}`).innerText = parsed.name.toUpperCase();
             }
 
-            const timelineKeys = Array.from(new Set(parsedSets.flatMap(set => set.rows.map(d => d.k)))).sort((a, b) => a - b);
-            const includeDateOnAxis = parsedSets.some(set => set.hasDate);
+            const rowKey = row => (useDateOnChart ? row.k : timeLabelToLocalKey(row.t));
+            const timelineKeys = Array.from(new Set(parsedSets.flatMap(set => set.rows.map(rowKey)))).sort((a, b) => a - b);
+            const includeDateOnAxis = useDateOnChart && parsedSets.some(set => set.hasDate);
             const labels = timelineKeys.map(k => formatLabelFromKey(k, includeDateOnAxis));
             const mapData = raw => timelineKeys.map(k => {
-                const f = raw.find(d => d.k === k);
+                const f = raw.find(d => rowKey(d) === k);
                 return f ? f.v : null;
             });
             const mapEvents = raw => timelineKeys.map(k => {
-                const f = raw.find(d => d.k === k);
+                const f = raw.find(d => rowKey(d) === k);
                 return f ? f.e : 'S';
             });
 
@@ -310,6 +328,7 @@
                 createInputPanels(Number(e.target.value));
                 updateApp();
             });
+            document.getElementById('dateMode').addEventListener('change', updateApp);
             updateApp();
         };
     </script>
