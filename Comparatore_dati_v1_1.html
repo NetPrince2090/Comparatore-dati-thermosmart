@@ -70,6 +70,36 @@
             `Cucina\n0000 | 20.2 | S\n0030 | 20.0 | S\n0100 | 20.0 | S\n0130 | 19.9 | S\n0200 | 19.9 | S\n0230 | 19.9 | S\n0300 | 20.1 | S\n0330 | 20.2 | S\n0400 | 20.2 | S\n0430 | 20.2 | S\n0500 | 20.1 | S\n0530 | 20.1 | S\n0600 | 20.0 | S\n0630 | 19.9 | S\n0700 | 20.0 | S\n0730 | 19.9 | S\n0800 | 19.9 | S\n0830 | 19.8 | S\n0900 | 19.8 | A\n0930 | 20.0 | S\n1000 | 20.4 | S\n1003 | 20.5 | B\n1030 | 20.6 | S\n1100 | 20.7 | S\n1130 | 20.9 | S\n1200 | 21.1 | S\n1230 | 21.3 | S\n1300 | 21.3 | S\n1330 | 21.3 | S\n1400 | 21.3 | S\n1430 | 21.2 | S\n1500 | 21.2 | S\n1530 | 21.1 | S\n1600 | 21.1 | S\n1630 | 21.1 | S\n1640 | 20.9 | A\n1656 | 21.3 | B\n1700 | 21.3 | S\n1730 | 21.4 | S\n1800 | 21.5 | S\n1830 | 21.8 | S\n1900 | 22.0 | S\n1930 | 22.3 | S\n2000 | 22.4 | S\n2030 | 22.6 | S\n2100 | 22.6 | S\n2130 | 22.6 | S\n2200 | 22.6 | S\n2230 | 22.5 | S\n2300 | 22.5 | S\n2330 | 22.3 | S`
         ];
 
+        function parseDateLine(line) {
+            const cleaned = line.replace(/^data\s*[:\-]?\s*/i, '').trim();
+            let m = cleaned.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/);
+            if (m) return { y: Number(m[3]), mo: Number(m[2]), d: Number(m[1]) };
+            m = cleaned.match(/^(\d{4})[\/\-](\d{1,2})[\/\-](\d{1,2})$/);
+            if (m) return { y: Number(m[1]), mo: Number(m[2]), d: Number(m[3]) };
+            return null;
+        }
+
+        function parseTime(rawTime) {
+            let t = rawTime.trim();
+            if (/^\d{4}$/.test(t)) t = `${t.slice(0, 2)}:${t.slice(2)}`;
+            const m = t.match(/^(\d{1,2}):(\d{2})$/);
+            if (!m) return null;
+            const h = Number(m[1]);
+            const min = Number(m[2]);
+            if (h < 0 || h > 23 || min < 0 || min > 59) return null;
+            return { h, min, label: `${String(h).padStart(2, '0')}:${String(min).padStart(2, '0')}` };
+        }
+
+        function formatLabelFromKey(key, includeDate) {
+            const d = new Date(key);
+            const hh = String(d.getHours()).padStart(2, '0');
+            const mm = String(d.getMinutes()).padStart(2, '0');
+            if (!includeDate) return `${hh}:${mm}`;
+            const dd = String(d.getDate()).padStart(2, '0');
+            const mo = String(d.getMonth() + 1).padStart(2, '0');
+            return `${dd}/${mo} ${hh}:${mm}`;
+        }
+
         function parseData(text, fallbackName) {
             if (!text || text.trim() === '') return { name: fallbackName, rows: [] };
             const lines = text.split('\n').map(line => line.trim()).filter(Boolean);
@@ -77,35 +107,38 @@
 
             const hasHeader = !lines[0].includes('|');
             const name = hasHeader ? lines[0] : fallbackName;
-            const dataLines = hasHeader ? lines.slice(1) : lines;
+            const dateLineIndex = hasHeader ? 1 : 0;
+            const parsedDate = lines[dateLineIndex] && !lines[dateLineIndex].includes('|') ? parseDateLine(lines[dateLineIndex]) : null;
+            const dataStartIndex = parsedDate ? dateLineIndex + 1 : (hasHeader ? 1 : 0);
+            const dataLines = lines.slice(dataStartIndex);
+
             const rows = dataLines
                 .filter(line => line.includes('|'))
                 .map(line => {
                     const parts = line.split('|').map(p => p.trim());
-                    let rawTime = parts[0];
-                    if (rawTime.length === 4) rawTime = `${rawTime.slice(0, 2)}:${rawTime.slice(2)}`;
-                    return { t: rawTime, v: parseFloat(parts[1]), e: parts[2] };
+                    const time = parseTime(parts[0]);
+                    if (!time) return null;
+                    const key = parsedDate
+                        ? new Date(parsedDate.y, parsedDate.mo - 1, parsedDate.d, time.h, time.min, 0, 0).getTime()
+                        : new Date(1970, 0, 1, time.h, time.min, 0, 0).getTime();
+                    return { t: time.label, k: key, v: parseFloat(parts[1]), e: parts[2] };
                 })
-                .filter(d => !isNaN(d.v));
-            return { name, rows };
-        }
-
-        function timeToMinutes(t) {
-            const [h, m] = t.split(':').map(Number);
-            return h * 60 + m;
+                .filter(d => d && !isNaN(d.v));
+            return { name, rows, hasDate: !!parsedDate };
         }
 
         function calculateStats(data) {
             let cycles = 0;
             let totalMins = 0;
-            let startTime = null;
+            let startKey = null;
             data.forEach(item => {
                 if (item.e === 'A') {
                     cycles++;
-                    startTime = timeToMinutes(item.t);
-                } else if (item.e === 'B' && startTime !== null) {
-                    totalMins += (timeToMinutes(item.t) - startTime);
-                    startTime = null;
+                    startKey = item.k;
+                } else if (item.e === 'B' && startKey !== null) {
+                    const delta = Math.round((item.k - startKey) / 60000);
+                    if (delta > 0) totalMins += delta;
+                    startKey = null;
                 }
             });
             return { cycles, totalMins };
@@ -128,7 +161,7 @@
                             <input id="fileInput-${i}" type="file" accept=".txt,.csv" class="hidden" onchange="loadFile(${i}, event)">
                         </div>
                     </div>
-                    <textarea id="input-${i}" class="data-input w-full h-32 p-2 border border-slate-300 rounded focus:ring-2 focus:outline-none" style="--tw-ring-color: ${palette[i]}" placeholder="Prima riga: nome riquadro&#10;Poi: Orario | Temperatura | Evento..."></textarea>
+                    <textarea id="input-${i}" class="data-input w-full h-32 p-2 border border-slate-300 rounded focus:ring-2 focus:outline-none" style="--tw-ring-color: ${palette[i]}" placeholder="1a riga: nome&#10;2a riga: data (es: 09/02/2026)&#10;Poi: Orario | Temperatura | Evento..."></textarea>
                 `;
                 container.appendChild(panel);
                 panel.querySelector(`#input-${i}`).value = previousValues[i] ?? (defaultDataSets[i] ?? `Campo ${i + 1}`);
@@ -164,13 +197,15 @@
                 document.getElementById(`panelTitle-${i}`).innerText = parsed.name.toUpperCase();
             }
 
-            const labels = Array.from(new Set(parsedSets.flatMap(set => set.rows.map(d => d.t)))).sort();
-            const mapData = raw => labels.map(l => {
-                const f = raw.find(d => d.t === l);
+            const timelineKeys = Array.from(new Set(parsedSets.flatMap(set => set.rows.map(d => d.k)))).sort((a, b) => a - b);
+            const includeDateOnAxis = parsedSets.some(set => set.hasDate);
+            const labels = timelineKeys.map(k => formatLabelFromKey(k, includeDateOnAxis));
+            const mapData = raw => timelineKeys.map(k => {
+                const f = raw.find(d => d.k === k);
                 return f ? f.v : null;
             });
-            const mapEvents = raw => labels.map(l => {
-                const f = raw.find(d => d.t === l);
+            const mapEvents = raw => timelineKeys.map(k => {
+                const f = raw.find(d => d.k === k);
                 return f ? f.e : 'S';
             });
 
@@ -259,5 +294,3 @@
     </script>
 </body>
 </html>
-
-
