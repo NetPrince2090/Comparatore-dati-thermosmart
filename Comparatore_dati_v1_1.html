@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Web App Termostati - 08 Febbraio 2026</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+    <style>
+        body { font-family: 'Inter', sans-serif; }
+        .chart-container { max-width: 1100px; margin: 1.5rem auto; padding: 1rem; }
+        textarea { font-family: monospace; font-size: 0.75rem; }
+    </style>
+</head>
+<body class="bg-slate-50 text-slate-900">
+
+    <div class="chart-container">
+        <header class="mb-6 text-center">
+            <h1 class="text-2xl font-bold text-slate-800">Monitoraggio Termostati Sala e Cucina</h1>
+            <p class="text-slate-500 text-sm">Incolla i dati per aggiornare il grafico in tempo reale</p>
+        </header>
+
+        <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-200 mb-4">
+            <label for="fieldCount" class="block text-sm font-bold text-slate-700 mb-2 uppercase">Numero Campi Dati</label>
+            <select id="fieldCount" class="w-full md:w-64 p-2 border border-slate-300 rounded focus:ring-2 focus:ring-slate-500 focus:outline-none">
+                <option value="1">1 Campo</option>
+                <option value="2" selected>2 Campi</option>
+                <option value="3">3 Campi</option>
+                <option value="4">4 Campi</option>
+            </select>
+        </div>
+
+        <!-- Area Inserimento Dati -->
+        <div id="inputPanels" class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6"></div>
+
+        <div class="flex justify-center mb-6">
+            <button onclick="updateApp()" class="bg-slate-800 text-white px-8 py-2 rounded-lg font-bold hover:bg-slate-700 transition shadow-lg uppercase tracking-wider">Aggiorna Grafico</button>
+        </div>
+        
+        <div class="bg-white p-4 rounded-xl shadow-lg border border-slate-200 h-[500px]">
+            <canvas id="dailyChart"></canvas>
+        </div>
+
+        <div class="mt-6 grid grid-cols-1 md:grid-cols-2 gap-4">
+            <!-- Riquadro Statistiche (Sinistra) -->
+            <div id="statsContainer" class="p-4 bg-white rounded-lg border border-slate-200 shadow-sm grid grid-cols-1 sm:grid-cols-2 gap-4"></div>
+
+            <!-- Legenda Eventi (Destra) -->
+            <div class="p-4 bg-white rounded-lg border border-slate-200 shadow-sm flex flex-col justify-center">
+                <h2 class="font-bold text-slate-700 mb-2 text-sm text-center">Legenda Eventi</h2>
+                <div class="flex justify-around text-xs font-medium">
+                    <span class="flex items-center text-green-600">
+                        <span class="w-3 h-3 bg-green-500 rounded-full mr-1.5 border border-white shadow-sm"></span> 
+                        ACCENSIONE (A)
+                    </span>
+                    <span class="flex items-center text-red-600">
+                        <span class="w-3 h-3 bg-red-500 rounded-full mr-1.5 border border-white shadow-sm"></span> 
+                        SPEGNIMENTO (B)
+                    </span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+        <script>
+        let chartInstance = null;
+        const palette = ['#1d4ed8', '#ea580c', '#0f766e', '#6d28d9'];
+        const defaultDataSets = [
+            `Sala\n0000 | 19.5 | S\n0030 | 19.4 | S\n0100 | 19.3 | S\n0130 | 19.3 | S\n0140 | 19.2 | A\n0200 | 19.5 | S\n0221 | 19.8 | B\n0230 | 19.7 | S\n0300 | 19.6 | S\n0330 | 19.7 | S\n0400 | 19.8 | S\n0430 | 19.8 | S\n0500 | 19.8 | S\n0530 | 19.8 | S\n0600 | 19.7 | S\n0630 | 19.6 | S\n0700 | 19.6 | S\n0730 | 19.5 | S\n0800 | 19.5 | S\n0830 | 19.4 | S\n0900 | 19.4 | A\n0930 | 19.7 | S\n1000 | 20.0 | S\n1028 | 20.4 | B\n1030 | 20.4 | S\n1100 | 20.6 | S\n1130 | 20.9 | S\n1200 | 21.1 | S\n1230 | 21.1 | S\n1300 | 21.1 | S\n1330 | 21.1 | S\n1400 | 21.1 | S\n1430 | 21.0 | S\n1500 | 20.9 | S\n1526 | 20.9 | A\n1530 | 20.9 | S\n1543 | 21.1 | B\n1600 | 21.0 | S\n1630 | 20.9 | S\n1643 | 20.9 | A\n1658 | 21.3 | B\n1700 | 21.2 | S\n1730 | 21.2 | S\n1800 | 21.4 | S\n1830 | 21.8 | S\n1900 | 22.2 | S\n1930 | 22.5 | S\n2000 | 22.7 | S\n2030 | 22.7 | S\n2100 | 22.8 | S\n2130 | 22.7 | S\n2200 | 22.6 | S\n2230 | 22.6 | S\n2300 | 22.5 | S\n2330 | 22.4 | S`,
+            `Cucina\n0000 | 20.2 | S\n0030 | 20.0 | S\n0100 | 20.0 | S\n0130 | 19.9 | S\n0200 | 19.9 | S\n0230 | 19.9 | S\n0300 | 20.1 | S\n0330 | 20.2 | S\n0400 | 20.2 | S\n0430 | 20.2 | S\n0500 | 20.1 | S\n0530 | 20.1 | S\n0600 | 20.0 | S\n0630 | 19.9 | S\n0700 | 20.0 | S\n0730 | 19.9 | S\n0800 | 19.9 | S\n0830 | 19.8 | S\n0900 | 19.8 | A\n0930 | 20.0 | S\n1000 | 20.4 | S\n1003 | 20.5 | B\n1030 | 20.6 | S\n1100 | 20.7 | S\n1130 | 20.9 | S\n1200 | 21.1 | S\n1230 | 21.3 | S\n1300 | 21.3 | S\n1330 | 21.3 | S\n1400 | 21.3 | S\n1430 | 21.2 | S\n1500 | 21.2 | S\n1530 | 21.1 | S\n1600 | 21.1 | S\n1630 | 21.1 | S\n1640 | 20.9 | A\n1656 | 21.3 | B\n1700 | 21.3 | S\n1730 | 21.4 | S\n1800 | 21.5 | S\n1830 | 21.8 | S\n1900 | 22.0 | S\n1930 | 22.3 | S\n2000 | 22.4 | S\n2030 | 22.6 | S\n2100 | 22.6 | S\n2130 | 22.6 | S\n2200 | 22.6 | S\n2230 | 22.5 | S\n2300 | 22.5 | S\n2330 | 22.3 | S`
+        ];
+
+        function parseData(text, fallbackName) {
+            if (!text || text.trim() === '') return { name: fallbackName, rows: [] };
+            const lines = text.split('\n').map(line => line.trim()).filter(Boolean);
+            if (lines.length === 0) return { name: fallbackName, rows: [] };
+
+            const hasHeader = !lines[0].includes('|');
+            const name = hasHeader ? lines[0] : fallbackName;
+            const dataLines = hasHeader ? lines.slice(1) : lines;
+            const rows = dataLines
+                .filter(line => line.includes('|'))
+                .map(line => {
+                    const parts = line.split('|').map(p => p.trim());
+                    let rawTime = parts[0];
+                    if (rawTime.length === 4) rawTime = `${rawTime.slice(0, 2)}:${rawTime.slice(2)}`;
+                    return { t: rawTime, v: parseFloat(parts[1]), e: parts[2] };
+                })
+                .filter(d => !isNaN(d.v));
+            return { name, rows };
+        }
+
+        function timeToMinutes(t) {
+            const [h, m] = t.split(':').map(Number);
+            return h * 60 + m;
+        }
+
+        function calculateStats(data) {
+            let cycles = 0;
+            let totalMins = 0;
+            let startTime = null;
+            data.forEach(item => {
+                if (item.e === 'A') {
+                    cycles++;
+                    startTime = timeToMinutes(item.t);
+                } else if (item.e === 'B' && startTime !== null) {
+                    totalMins += (timeToMinutes(item.t) - startTime);
+                    startTime = null;
+                }
+            });
+            return { cycles, totalMins };
+        }
+
+        function createInputPanels(count) {
+            const container = document.getElementById('inputPanels');
+            const previousValues = Array.from(document.querySelectorAll('.data-input')).map(el => el.value);
+            container.innerHTML = '';
+
+            for (let i = 0; i < count; i++) {
+                const panel = document.createElement('div');
+                panel.className = 'bg-white p-4 rounded-xl shadow-sm border border-slate-200';
+                panel.innerHTML = `
+                    <div class="flex items-center justify-between mb-2 gap-2">
+                        <label id="panelTitle-${i}" class="block text-sm font-bold uppercase" style="color: ${palette[i]}">Campo ${i + 1}</label>
+                        <div class="flex gap-2">
+                            <button onclick="clearField(${i})" class="text-xs bg-slate-200 text-slate-700 px-2 py-1 rounded hover:bg-slate-300 transition">Cancella</button>
+                            <button onclick="openFileDialog(${i})" class="text-xs bg-slate-800 text-white px-2 py-1 rounded hover:bg-slate-700 transition">Carica file</button>
+                            <input id="fileInput-${i}" type="file" accept=".txt,.csv" class="hidden" onchange="loadFile(${i}, event)">
+                        </div>
+                    </div>
+                    <textarea id="input-${i}" class="data-input w-full h-32 p-2 border border-slate-300 rounded focus:ring-2 focus:outline-none" style="--tw-ring-color: ${palette[i]}" placeholder="Prima riga: nome riquadro&#10;Poi: Orario | Temperatura | Evento..."></textarea>
+                `;
+                container.appendChild(panel);
+                panel.querySelector(`#input-${i}`).value = previousValues[i] ?? (defaultDataSets[i] ?? `Campo ${i + 1}`);
+            }
+        }
+
+        function openFileDialog(index) {
+            document.getElementById(`fileInput-${index}`).click();
+        }
+
+        function loadFile(index, event) {
+            const file = event.target.files?.[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = e => {
+                document.getElementById(`input-${index}`).value = e.target.result;
+                updateApp();
+            };
+            reader.readAsText(file);
+        }
+
+        function clearField(index) {
+            document.getElementById(`input-${index}`).value = '';
+            updateApp();
+        }
+
+        function updateApp() {
+            const count = Number(document.getElementById('fieldCount').value);
+            const parsedSets = [];
+            for (let i = 0; i < count; i++) {
+                const parsed = parseData(document.getElementById(`input-${i}`).value, `Campo ${i + 1}`);
+                parsedSets.push(parsed);
+                document.getElementById(`panelTitle-${i}`).innerText = parsed.name.toUpperCase();
+            }
+
+            const labels = Array.from(new Set(parsedSets.flatMap(set => set.rows.map(d => d.t)))).sort();
+            const mapData = raw => labels.map(l => {
+                const f = raw.find(d => d.t === l);
+                return f ? f.v : null;
+            });
+            const mapEvents = raw => labels.map(l => {
+                const f = raw.find(d => d.t === l);
+                return f ? f.e : 'S';
+            });
+
+            const statsContainer = document.getElementById('statsContainer');
+            statsContainer.innerHTML = '';
+            parsedSets.forEach((set, i) => {
+                const stat = calculateStats(set.rows);
+                const statBox = document.createElement('div');
+                statBox.className = 'border border-slate-100 rounded p-2';
+                statBox.innerHTML = `
+                    <h2 class="font-bold text-sm flex items-center mb-1" style="color: ${palette[i]}">
+                        <span class="w-2 h-2 rounded-full mr-2" style="background-color: ${palette[i]}"></span> ${set.name.toUpperCase()}
+                    </h2>
+                    <p class="text-xs font-semibold text-slate-600">${stat.cycles} Cicli ON</p>
+                    <p class="text-xs font-bold text-orange-600">${stat.totalMins} min totali</p>
+                `;
+                statsContainer.appendChild(statBox);
+            });
+
+            const eventSets = parsedSets.map(set => mapEvents(set.rows));
+            const datasets = parsedSets.map((set, i) => {
+                const events = eventSets[i];
+                return {
+                    label: `${set.name} (°C)`,
+                    data: mapData(set.rows),
+                    borderColor: palette[i],
+                    backgroundColor: palette[i],
+                    borderWidth: 2,
+                    tension: 0.3,
+                    spanGaps: true,
+                    pointRadius: c => (['A', 'B'].includes(events[c.dataIndex]) ? 7 : 0),
+                    pointBackgroundColor: c => {
+                        const e = events[c.dataIndex];
+                        return e === 'A' ? '#22c55e' : (e === 'B' ? '#ef4444' : 'transparent');
+                    },
+                    pointBorderColor: '#fff',
+                    pointBorderWidth: 1.5
+                };
+            });
+
+            const ctx = document.getElementById('dailyChart').getContext('2d');
+            if (chartInstance) chartInstance.destroy();
+            chartInstance = new Chart(ctx, {
+                type: 'line',
+                data: { labels, datasets },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    interaction: { mode: 'index', intersect: false },
+                    scales: {
+                        y: { min: 18, max: 24, ticks: { stepSize: 0.5 }, title: { display: true, text: 'Temperatura °C' } },
+                        x: { ticks: { autoSkip: true, maxTicksLimit: 24 } }
+                    },
+                    plugins: {
+                        legend: { position: 'top' },
+                        tooltip: {
+                            backgroundColor: 'rgba(255, 255, 255, 0.95)',
+                            titleColor: '#1e293b',
+                            bodyColor: '#1e293b',
+                            borderColor: '#e2e8f0',
+                            borderWidth: 1,
+                            callbacks: {
+                                label: item => {
+                                    const evSet = eventSets[item.datasetIndex] || [];
+                                    const ev = evSet[item.dataIndex];
+                                    let status = `${item.dataset.label}: ${item.raw}°C`;
+                                    if (ev === 'A') status += ' [ON]';
+                                    if (ev === 'B') status += ' [OFF]';
+                                    return status;
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        window.onload = () => {
+            createInputPanels(Number(document.getElementById('fieldCount').value));
+            document.getElementById('fieldCount').addEventListener('change', e => {
+                createInputPanels(Number(e.target.value));
+                updateApp();
+            });
+            updateApp();
+        };
+    </script>
+</body>
+</html>
+
+
